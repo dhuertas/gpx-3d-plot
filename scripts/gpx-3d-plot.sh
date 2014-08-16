@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # @author Dani Huertas
-# @date Thu Aug 14 17:30:10 CEST 2014
 # @email huertas.dani@gmail.com
+# @date Thu Aug 14 17:30:10 CEST 2014
 #
 
 # TODO optional conversion from lon,lat,alt to x,y,z coordinates
