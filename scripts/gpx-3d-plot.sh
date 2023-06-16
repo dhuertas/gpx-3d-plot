@@ -18,38 +18,47 @@ if [ ! -f $1 ]; then
   exit 0
 fi
 
-OFFSET_LINE=0
-
-if [ $2 -gt 0 ]
-then
-  OFFSET_LINE=$2
-fi
-
-START_LINE=$(( $(grep -n "<trkseg>" $1 | head -1 | awk -F: '{print $1}') + 1 + $OFFSET_LINE))
 DATA_OUT=$(echo $1 | sed 's/gpx/dat/g')
 PLOT_OUT=$(echo $1 | sed 's/gpx/plot/g');
 
-### skip first N lines
-cat $1 | tail -n +$START_LINE | \
-### grep latitude, longitude, elevation and time
-grep "lat\|lon\|ele\|time" | \
-### group three lines 
-awk '{ if (NR%3 == 0) print $0; else printf "%s", $0}' | \
-### remove stuff
-sed -e 's/[<\/>,]//g' -e 's/ele//g' -e 's/time//g' -e 's/lat=//g' -e 's/lon=//g' -e 's/"//g' | \
-### print lines to output file
-awk '{print $2"\t"$3"\t"$4"\t"$5}' > $DATA_OUT
+### GPX parser using python
+py=`cat <<EOF
+import xml.etree.ElementTree as ET
+
+tree = ET.parse('${1}')
+
+root = tree.getroot()
+
+for trk in root.findall('{*}trk'):
+    for trkseg in trk.findall('{*}trkseg'):
+        for trkpt in trkseg.findall('{*}trkpt'):
+            time, ele = '1970-01-01T00:00:00Z', '0'
+            for child in trkpt:
+                if child.tag.endswith('time'):
+                    time = child.text
+                elif child.tag.endswith('ele'):
+                    ele = child.text
+            if ele != '0':
+                print(ele, time, trkpt.attrib['lat'], trkpt.attrib['lon'], sep='\t')
+EOF`
 
 ### create gnuplot file
-echo "set terminal wxt" >  $PLOT_OUT
-echo "set ticslevel 0" >> $PLOT_OUT
-echo "set zrange [0:*]" >> $PLOT_OUT
-echo "set xlabel 'latitude'" >> $PLOT_OUT
-echo "set ylabel 'longitude'" >> $PLOT_OUT
-echo "set zlabel 'altitude'" >> $PLOT_OUT
-echo "unset key" >> $PLOT_OUT
-echo "splot '$DATA_OUT' using 1:2:3:3 w impulses lw 2 lc palette, \\" >> $PLOT_OUT
-echo "'' using 1:2:3 lc rgb 'black' lt 2 lw 0.5 w l" >> $PLOT_OUT
+plot=`cat <<EOF
+set terminal wxt
+set ticslevel 0
+set zrange [0:*]
+set xlabel 'latitude'
+set ylabel 'longitude'
+set zlabel 'altitude'
+unset key
+splot '$DATA_OUT' using 3:4:1 w impulses lw 2 lc palette, \\
+'' using 3:4:1 lc rgb 'black' lt 2 lw 0.5 w l
+EOF`
+
+echo "$plot" > $PLOT_OUT
+
+### parse gpx
+python3 -c "$py" > $DATA_OUT
 
 ### plot data
 gnuplot $PLOT_OUT -persist
